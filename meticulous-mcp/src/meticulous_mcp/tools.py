@@ -24,6 +24,7 @@ from meticulous.api_types import APIError, ActionType
 from meticulous.profile import Profile
 
 from .api_client import MeticulousAPIClient
+from .image_utils import resolve_image
 from .profile_builder import (
     create_profile,
     create_stage,
@@ -88,7 +89,13 @@ class ProfileCreateInput(BaseModel):
         default=None, description="Optional accent color in hex format (e.g., '#FF5733')"
     )
     image: Optional[str] = Field(
-        default=None, description="Optional base64 image data URI or relative URL"
+        default=None, description="Optional profile image. Accepts: data URI (data:image/png;base64,...), HTTP(S) URL, or file:// URI. URLs are fetched and converted to data URIs automatically."
+    )
+    short_description: Optional[str] = Field(
+        default=None, description="Optional short description displayed under the profile name"
+    )
+    description: Optional[str] = Field(
+        default=None, description="Optional longer description of the profile"
     )
 
 
@@ -99,7 +106,18 @@ class ProfileUpdateInput(BaseModel):
     name: Optional[str] = Field(default=None, description="New profile name")
     temperature: Optional[float] = Field(default=None, description="New temperature")
     final_weight: Optional[float] = Field(default=None, description="New final weight")
-    image: Optional[str] = Field(default=None, description="New base64 image data URI or relative URL")
+    image: Optional[str] = Field(
+        default=None, description="New profile image. Accepts: data URI (data:image/png;base64,...), HTTP(S) URL, or file:// URI. URLs are fetched and converted to data URIs automatically."
+    )
+    accent_color: Optional[str] = Field(
+        default=None, description="Accent color in hex format (e.g., '#FF5733')"
+    )
+    short_description: Optional[str] = Field(
+        default=None, description="Short description displayed under the profile name"
+    )
+    description: Optional[str] = Field(
+        default=None, description="Longer description of the profile"
+    )
     # Accept stages as either a list of dicts or a JSON string
     stages: Optional[List[Dict[str, Any]]] = Field(
         default=None, description="Optional list of stage dictionaries (full replacement)"
@@ -267,13 +285,21 @@ def create_profile_tool(input_data: ProfileCreateInput) -> Dict[str, Any]:
             variables=variables,
         )
         
+        # Resolve image URL if provided
+        resolved_image = None
+        if input_data.image:
+            resolved_image = resolve_image(input_data.image)
+
         # Add display if accent_color or image provided
-        if input_data.accent_color or input_data.image:
+        if input_data.accent_color or resolved_image:
             from meticulous.profile import Display
             profile.display = Display(
                 accentColor=input_data.accent_color,
-                image=input_data.image
+                image=resolved_image,
             )
+
+        # Track whether we need raw save (for fields pyMeticulous strips)
+        needs_raw_save = bool(input_data.short_description or input_data.description)
         
         # Lint profile BEFORE normalization to catch issues that will be auto-fixed
         # This helps agents understand what normalization will happen
@@ -320,25 +346,43 @@ def create_profile_tool(input_data: ProfileCreateInput) -> Dict[str, Any]:
     
     # Normalize profile before saving (ensures empty limits lists become None)
     normalized_profile = normalize_profile(profile)
-    
+
     # Save profile
-    result = _api_client.save_profile(normalized_profile)
-    if isinstance(result, APIError):
-        error_msg = result.error or result.status or "Unknown error"
-        raise Exception(f"Failed to save profile: {error_msg}")
-    
+    if needs_raw_save:
+        # Build dict and inject display fields that pyMeticulous would strip
+        save_dict = profile_to_dict(normalized_profile, normalize=True)
+        if save_dict.get("display") is None:
+            save_dict["display"] = {}
+        if input_data.short_description is not None:
+            save_dict["display"]["shortDescription"] = input_data.short_description
+        if input_data.description is not None:
+            save_dict["display"]["description"] = input_data.description
+        raw_result = _api_client.save_profile_raw(save_dict)
+        if isinstance(raw_result, APIError):
+            error_msg = raw_result.error or raw_result.status or "Unknown error"
+            raise Exception(f"Failed to save profile: {error_msg}")
+        profile_id = raw_result.get("id") or raw_result.get("profile", {}).get("id", "unknown")
+        profile_name = raw_result.get("name") or raw_result.get("profile", {}).get("name", input_data.name)
+    else:
+        result = _api_client.save_profile(normalized_profile)
+        if isinstance(result, APIError):
+            error_msg = result.error or result.status or "Unknown error"
+            raise Exception(f"Failed to save profile: {error_msg}")
+        profile_id = result.profile.id
+        profile_name = result.profile.name
+
     # Build response with warnings if any
     response = {
-        "profile_id": result.profile.id,
-        "profile_name": result.profile.name,
+        "profile_id": profile_id,
+        "profile_name": profile_name,
         "message": f"Profile '{input_data.name}' created successfully",
     }
-    
+
     # Include linting warnings in response (even on success)
     if warnings:
         response["warnings"] = warnings
         response["message"] += f" (with {len(warnings)} warning(s) - see 'warnings' field)"
-    
+
     return response
 
 
@@ -385,21 +429,27 @@ def get_profile_tool(profile_id: str) -> Dict[str, Any]:
 
 def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
     """Update an existing profile.
-    
+
     Args:
         input_data: Profile update input
-        
+
     Returns:
         Dictionary with updated profile ID and success message
     """
     _ensure_initialized()
-    
-    # Get existing profile
+
+    # Get existing profile (pyMeticulous model for stages/variables/validation)
     existing = _api_client.get_profile(input_data.profile_id)
     if isinstance(existing, APIError):
         error_msg = existing.error or existing.status or "Unknown error"
         raise Exception(f"Failed to get profile: {error_msg}")
-    
+
+    # Fetch raw profile to preserve display fields pyMeticulous strips
+    raw_profile = _api_client.get_profile_raw(input_data.profile_id)
+    raw_display = {}
+    if not isinstance(raw_profile, APIError):
+        raw_display = raw_profile.get("display") or {}
+
     # Update fields
     if input_data.name is not None:
         existing.name = input_data.name
@@ -407,13 +457,24 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
         existing.temperature = input_data.temperature
     if input_data.final_weight is not None:
         existing.final_weight = input_data.final_weight
+
+    # Resolve image URL if provided
     if input_data.image is not None:
+        resolved_image = resolve_image(input_data.image)
         from meticulous.profile import Display
         if existing.display is None:
-            existing.display = Display(image=input_data.image)
+            existing.display = Display(image=resolved_image)
         else:
-            existing.display.image = input_data.image
-    
+            existing.display.image = resolved_image
+
+    # Handle accent_color update
+    if input_data.accent_color is not None:
+        from meticulous.profile import Display
+        if existing.display is None:
+            existing.display = Display(accentColor=input_data.accent_color)
+        else:
+            existing.display.accentColor = input_data.accent_color
+
     # Update stages if provided (accept either 'stages' list or 'stages_json' string)
     stages_to_process = None
     if input_data.stages is not None:
@@ -424,30 +485,30 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
             stages_to_process = json.loads(input_data.stages_json)
         else:
             stages_to_process = input_data.stages_json
-    
+
     if stages_to_process is not None:
         import json
         try:
             stages_data = stages_to_process
-            
+
             # Transform stages from input format to Stage model format
             transformed_stages = []
             for stage_data in stages_data:
                 # Make a copy to avoid mutating the original
                 stage_dict = dict(stage_data)
-                
+
                 # Convert dynamics_points/dynamics_over format to dynamics object
                 if "dynamics_points" in stage_dict or "dynamics_over" in stage_dict:
                     dynamics_points = stage_dict.pop("dynamics_points", [])
                     dynamics_over = stage_dict.pop("dynamics_over", "time")
                     dynamics_interpolation = stage_dict.pop("dynamics_interpolation", "linear")
-                    
+
                     stage_dict["dynamics"] = {
                         "points": dynamics_points,
                         "over": dynamics_over,
                         "interpolation": dynamics_interpolation,
                     }
-                
+
                 # Ensure exit_triggers is a list
                 if "exit_triggers" not in stage_dict:
                     stage_dict["exit_triggers"] = []
@@ -468,9 +529,9 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
                 elif isinstance(stage_dict["limits"], list) and len(stage_dict["limits"]) == 0:
                     # Keep as empty array
                     stage_dict["limits"] = []
-                
+
                 transformed_stages.append(stage_dict)
-            
+
             # Rebuild stages from transformed data
             from meticulous.profile import Stage
             try:
@@ -487,14 +548,14 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
                             msg = error.get("msg", "Validation error")
                             error_details.append(f"{field}: {msg}")
                         raise Exception(
-                            f"Invalid stage format for stage '{stage_name}':\n" + 
+                            f"Invalid stage format for stage '{stage_name}':\n" +
                             "\n".join(f"  - {detail}" for detail in error_details) +
                             f"\n\nStage data: {json.dumps(stage_dict, indent=2)}"
                         )
-                
+
                 # Only update if we successfully created all stages
                 existing.stages = new_stages
-                
+
             except Exception as e:
                 # Re-raise if already formatted
                 if "Invalid stage format" in str(e):
@@ -508,7 +569,7 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
             if isinstance(e, Exception) and "Invalid stage format" in str(e):
                 raise
             raise Exception(f"Error processing stages: {e}")
-    
+
     # Update variables if provided
     if input_data.variables_json:
         import json
@@ -525,10 +586,10 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
                 msg = error.get("msg", "Validation error")
                 error_details.append(f"{field}: {msg}")
             raise Exception(
-                "Invalid variable format:\n" + 
+                "Invalid variable format:\n" +
                 "\n".join(f"  - {detail}" for detail in error_details)
             )
-    
+
     # Validate updated profile
     warnings = []  # Initialize warnings list
     try:
@@ -536,13 +597,13 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
         # This helps agents understand what normalization will happen
         profile_dict_for_linting = profile_to_dict(existing, normalize=False)
         warnings = _validator.lint(profile_dict_for_linting)
-        
+
         # Validate profile (use normalized version for validation)
         profile_dict = profile_to_dict(existing, normalize=True)
-        
+
         # Run validation (will raise if invalid)
         _validator.validate_and_raise(profile_dict)
-        
+
     except ProfileValidationError as e:
         # Get linting warnings even if validation fails (might help with context)
         try:
@@ -550,39 +611,64 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
             warnings = _validator.lint(profile_dict_for_linting)
         except Exception:
             warnings = []  # Ensure warnings is initialized even if linting fails
-        
+
         formatted_errors = _format_validation_errors(e.errors)
         error_msg = formatted_errors
-        
+
         # Include warnings if any
         if warnings:
             error_msg += "\n\nAdditional warnings:\n"
             for i, warning in enumerate(warnings, 1):
                 error_msg += f"  {i}. {warning}\n"
-        
+
         raise Exception(error_msg)
-    
+
     # Normalize profile before saving (ensures empty limits lists become None)
     normalized_profile = normalize_profile(existing)
-    
-    # Save updated profile
-    result = _api_client.save_profile(normalized_profile)
-    if isinstance(result, APIError):
-        error_msg = result.error or result.status or "Unknown error"
+
+    # Always use raw save to preserve display metadata fields
+    save_dict = profile_to_dict(normalized_profile, normalize=True)
+    if save_dict.get("display") is None:
+        save_dict["display"] = {}
+
+    # When the user didn't provide a new image, preserve the server-side image path
+    # from raw_display. Without this, pyMeticulous re-serializes the image as a data URI,
+    # and the backend treats it as a new upload — replacing the display object and
+    # dropping shortDescription/description.
+    if input_data.image is None and raw_display.get("image"):
+        save_dict["display"]["image"] = raw_display["image"]
+
+    # Merge display fields: start with preserved raw values, override with user input
+    for key in ("shortDescription", "description"):
+        if raw_display.get(key) is not None:
+            save_dict["display"][key] = raw_display[key]
+    if input_data.short_description is not None:
+        save_dict["display"]["shortDescription"] = input_data.short_description
+    if input_data.description is not None:
+        save_dict["display"]["description"] = input_data.description
+    if input_data.accent_color is not None:
+        save_dict["display"]["accentColor"] = input_data.accent_color
+
+    raw_result = _api_client.save_profile_raw(save_dict)
+    if isinstance(raw_result, APIError):
+        error_msg = raw_result.error or raw_result.status or "Unknown error"
         raise Exception(f"Failed to update profile: {error_msg}")
-    
+
+    profile_id = save_dict.get("id", input_data.profile_id)
+    profile_name = save_dict.get("name", existing.name)
+
     # Build response with warnings if any
     response = {
-        "profile_id": result.profile.id,
-        "profile_name": result.profile.name,
-        "message": f"Profile '{result.profile.name}' updated successfully",
+        "profile_id": profile_id,
+        "profile_name": profile_name,
+        "message": f"Profile '{profile_name}' updated successfully",
     }
-    
+
     # Include linting warnings in response (even on success)
     if warnings:
         response["warnings"] = warnings
         response["message"] += f" (with {len(warnings)} warning(s) - see 'warnings' field)"
-    
+
     return response
 
 

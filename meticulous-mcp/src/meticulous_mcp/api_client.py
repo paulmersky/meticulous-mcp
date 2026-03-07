@@ -215,6 +215,51 @@ class MeticulousAPIClient:
         """
         return self._api.get_shot_files(date_str)
 
+    def save_profile_raw(self, profile_dict: dict) -> Union[Dict[str, Any], APIError]:
+        """Save a profile using a raw dict, bypassing pyMeticulous model serialization.
+
+        This preserves fields like shortDescription and description that the
+        pyMeticulous Display model would strip during model_dump().
+
+        Args:
+            profile_dict: Full profile dict matching the backend API schema.
+
+        Returns:
+            Parsed JSON response dict or APIError on failure.
+        """
+        base = self.base_url.rstrip("/")
+        try:
+            response = self._api.session.post(
+                f"{base}/api/v1/profile/save",
+                json=profile_dict,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return APIError(status=str(response.status_code), error=response.text)
+        except Exception as e:
+            return APIError(status="Error", error=str(e))
+
+    def get_profile_raw(self, profile_id: str) -> Union[Dict[str, Any], APIError]:
+        """Get a profile as a raw dict, preserving all backend fields.
+
+        Unlike get_profile(), this does not deserialize through pyMeticulous
+        models, so fields like shortDescription/description are preserved.
+
+        Args:
+            profile_id: The profile ID.
+
+        Returns:
+            Raw profile dict or APIError on failure.
+        """
+        base = self.base_url.rstrip("/")
+        try:
+            response = self._api.session.get(f"{base}/api/v1/profile/get/{profile_id}")
+            if response.status_code == 200:
+                return response.json()
+            return APIError(status=str(response.status_code), error=response.text)
+        except Exception as e:
+            return APIError(status="Error", error=str(e))
+
     def get_shot_url(self, date_str: str, filename: str) -> str:
         """Get the full URL for a shot log file.
         

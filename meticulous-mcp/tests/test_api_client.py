@@ -331,3 +331,51 @@ def test_api_error_with_both_status_and_error(api_client, mock_api):
     assert result.error == "Custom error"
     assert result.status == "500 Internal Server Error"
 
+
+def test_save_profile_raw_success(api_client, mock_api):
+    """Test saving a profile via raw dict."""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"id": "test-id", "name": "Test"}
+    mock_api.session.post.return_value = mock_response
+    mock_api.base_url = "http://test.local"
+
+    profile_dict = {"id": "test-id", "name": "Test", "display": {"shortDescription": "Hello"}}
+    result = api_client.save_profile_raw(profile_dict)
+    assert result == {"id": "test-id", "name": "Test"}
+    mock_api.session.post.assert_called_once_with(
+        "http://test.local/api/v1/profile/save",
+        json=profile_dict,
+    )
+
+
+def test_save_profile_raw_error(api_client, mock_api):
+    """Test save_profile_raw with HTTP error."""
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.text = "Internal Server Error"
+    mock_api.session.post.return_value = mock_response
+    mock_api.base_url = "http://test.local"
+
+    result = api_client.save_profile_raw({"id": "test-id"})
+    assert isinstance(result, APIError)
+    assert result.status == "500"
+
+
+def test_get_profile_raw(api_client, mock_api):
+    """Test getting a profile as a raw dict."""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "id": "test-id",
+        "name": "Test",
+        "display": {"shortDescription": "Hello", "description": "World"},
+    }
+    mock_api.session.get.return_value = mock_response
+    mock_api.base_url = "http://test.local"
+
+    result = api_client.get_profile_raw("test-id")
+    assert result["display"]["shortDescription"] == "Hello"
+    assert result["display"]["description"] == "World"
+    mock_api.session.get.assert_called_once_with("http://test.local/api/v1/profile/test-id")
+
