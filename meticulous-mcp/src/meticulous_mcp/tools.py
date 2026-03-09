@@ -299,7 +299,7 @@ def create_profile_tool(input_data: ProfileCreateInput) -> Dict[str, Any]:
             )
 
         # Track whether we need raw save (for fields pyMeticulous strips)
-        needs_raw_save = bool(input_data.short_description or input_data.description)
+        needs_raw_save = (input_data.short_description is not None or input_data.description is not None)
         
         # Lint profile BEFORE normalization to catch issues that will be auto-fixed
         # This helps agents understand what normalization will happen
@@ -446,9 +446,12 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
 
     # Fetch raw profile to preserve display fields pyMeticulous strips
     raw_profile = _api_client.get_profile_raw(input_data.profile_id)
-    raw_display = {}
-    if not isinstance(raw_profile, APIError):
-        raw_display = raw_profile.get("display") or {}
+    if isinstance(raw_profile, APIError):
+        error_msg = raw_profile.error or raw_profile.status or "Unknown error"
+        raise Exception(
+            f"Failed to fetch raw profile for display preservation: {error_msg}"
+        )
+    raw_display = raw_profile.get("display") or {}
 
     # Update fields
     if input_data.name is not None:
@@ -654,8 +657,12 @@ def update_profile_tool(input_data: ProfileUpdateInput) -> Dict[str, Any]:
         error_msg = raw_result.error or raw_result.status or "Unknown error"
         raise Exception(f"Failed to update profile: {error_msg}")
 
-    profile_id = save_dict.get("id", input_data.profile_id)
-    profile_name = save_dict.get("name", existing.name)
+    if isinstance(raw_result, dict):
+        profile_id = raw_result.get("id") or save_dict.get("id", input_data.profile_id)
+        profile_name = raw_result.get("name") or save_dict.get("name", existing.name)
+    else:
+        profile_id = save_dict.get("id", input_data.profile_id)
+        profile_name = save_dict.get("name", existing.name)
 
     # Build response with warnings if any
     response = {

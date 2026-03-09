@@ -377,5 +377,5 @@ def test_get_profile_raw(api_client, mock_api):
     result = api_client.get_profile_raw("test-id")
     assert result["display"]["shortDescription"] == "Hello"
     assert result["display"]["description"] == "World"
-    mock_api.session.get.assert_called_once_with("http://test.local/api/v1/profile/test-id")
+    mock_api.session.get.assert_called_once_with("http://test.local/api/v1/profile/get/test-id")
 

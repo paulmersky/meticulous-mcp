@@ -2,7 +2,6 @@
 
 import base64
 import io
-import tempfile
 from unittest.mock import Mock, patch
 
 import pytest
@@ -25,10 +24,14 @@ def test_http_url_fetch():
     mock_resp.content = raw_bytes
     mock_resp.headers = {"Content-Type": "image/png"}
     mock_resp.raise_for_status = Mock()
+    mock_resp.is_redirect = False
+    mock_resp.is_permanent_redirect = False
 
     with patch("meticulous_mcp.image_utils.requests.get", return_value=mock_resp) as mock_get:
         result = resolve_image("http://example.com/img.png")
-        mock_get.assert_called_once_with("http://example.com/img.png", timeout=30)
+        mock_get.assert_called_once_with(
+            "http://example.com/img.png", timeout=30, allow_redirects=False
+        )
 
     assert result == f"data:image/png;base64,{expected_b64}"
 
@@ -42,6 +45,8 @@ def test_https_url_fetch():
     mock_resp.content = raw_bytes
     mock_resp.headers = {"Content-Type": "image/jpeg; charset=utf-8"}
     mock_resp.raise_for_status = Mock()
+    mock_resp.is_redirect = False
+    mock_resp.is_permanent_redirect = False
 
     with patch("meticulous_mcp.image_utils.requests.get", return_value=mock_resp):
         result = resolve_image("https://example.com/photo.jpg")
@@ -49,14 +54,13 @@ def test_https_url_fetch():
     assert result == f"data:image/jpeg;base64,{expected_b64}"
 
 
-def test_file_uri_read():
+def test_file_uri_read(tmp_path):
     """file:// URIs read from disk and encode."""
     content = b"fake png data"
     expected_b64 = base64.b64encode(content).decode("ascii")
 
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        f.write(content)
-        path = f.name
+    path = tmp_path / "test.png"
+    path.write_bytes(content)
 
     result = resolve_image(f"file://{path}")
     assert result == f"data:image/png;base64,{expected_b64}"
@@ -73,6 +77,8 @@ def test_http_error():
     import requests as req
 
     mock_resp = Mock()
+    mock_resp.is_redirect = False
+    mock_resp.is_permanent_redirect = False
     mock_resp.raise_for_status.side_effect = req.HTTPError("404 Not Found")
 
     with patch("meticulous_mcp.image_utils.requests.get", return_value=mock_resp):
@@ -113,6 +119,8 @@ def test_oversized_image_auto_resized():
     mock_resp.content = large_png
     mock_resp.headers = {"Content-Type": "image/png"}
     mock_resp.raise_for_status = Mock()
+    mock_resp.is_redirect = False
+    mock_resp.is_permanent_redirect = False
 
     with patch("meticulous_mcp.image_utils.requests.get", return_value=mock_resp):
         result = resolve_image("http://example.com/huge.png")
@@ -124,7 +132,7 @@ def test_oversized_image_auto_resized():
     assert len(b64_part) <= MAX_B64_BYTES
 
 
-def test_small_image_not_resized():
+def test_small_image_not_resized(tmp_path):
     """Images under the size limit are not modified."""
     from PIL import Image
 
@@ -135,9 +143,8 @@ def test_small_image_not_resized():
     small_png = buf.getvalue()
     expected_b64 = base64.b64encode(small_png).decode("ascii")
 
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        f.write(small_png)
-        path = f.name
+    path = tmp_path / "small.png"
+    path.write_bytes(small_png)
 
     result = resolve_image(f"file://{path}")
     # Should keep original PNG format since it's small enough

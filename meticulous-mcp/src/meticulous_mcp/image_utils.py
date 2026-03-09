@@ -16,6 +16,7 @@ import requests
 # The image is base64-encoded inside a JSON profile payload that includes
 # stages, variables, etc. Reserve headroom for the rest of the payload.
 MAX_B64_BYTES = 700_000  # ~700KB of base64 leaves room for the profile JSON
+MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20MB max input image size
 
 
 def _fit_image(data: bytes, mime: str) -> tuple[bytes, str]:
@@ -38,7 +39,7 @@ def _fit_image(data: bytes, mime: str) -> tuple[bytes, str]:
         return data, mime
 
     img = Image.open(io.BytesIO(data))
-    if img.mode == "RGBA":
+    if img.mode != "RGB":
         img = img.convert("RGB")
 
     # Try progressively smaller sizes until it fits
@@ -57,7 +58,13 @@ def _fit_image(data: bytes, mime: str) -> tuple[bytes, str]:
     # Last resort: lowest resolution we tried
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=75)
-    return buf.getvalue(), "image/jpeg"
+    result = buf.getvalue()
+    if len(base64.b64encode(result)) > MAX_B64_BYTES:
+        raise ValueError(
+            f"Image still exceeds maximum size ({MAX_B64_BYTES} base64 bytes) "
+            "after all resize attempts"
+        )
+    return result, "image/jpeg"
 
 
 def _try_fit(data: bytes, mime: str) -> tuple[bytes, str]:
@@ -94,11 +101,21 @@ def resolve_image(value: str) -> str:
 
     if parsed.scheme in ("http", "https"):
         try:
-            resp = requests.get(value, timeout=30)
+            resp = requests.get(value, timeout=30, allow_redirects=False)
+            if resp.is_redirect or resp.is_permanent_redirect:
+                raise ValueError(
+                    f"Image URL redirected (to {resp.headers.get('Location')}). "
+                    "For safety, redirects are not followed. Use the direct URL."
+                )
             resp.raise_for_status()
         except requests.RequestException as e:
             raise ValueError(f"Failed to fetch image from {value}: {e}")
 
+        if len(resp.content) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"Image too large ({len(resp.content)} bytes). "
+                f"Maximum allowed: {MAX_IMAGE_BYTES} bytes (20MB)."
+            )
         content_type = resp.headers.get("Content-Type", "image/png").split(";")[0].strip()
         data, mime = _try_fit(resp.content, content_type)
         encoded = base64.b64encode(data).decode("ascii")
@@ -111,6 +128,12 @@ def resolve_image(value: str) -> str:
                 data = f.read()
         except OSError as e:
             raise ValueError(f"Failed to read image file {path}: {e}")
+
+        if len(data) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"Image too large ({len(data)} bytes). "
+                f"Maximum allowed: {MAX_IMAGE_BYTES} bytes (20MB)."
+            )
 
         mime, _ = mimetypes.guess_type(path)
         if mime is None:
