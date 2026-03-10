@@ -131,8 +131,21 @@ def create_profile(input_data: str) -> Dict[str, Any]:
               ],
               "variables": [...],  // optional
               "accent_color": "#FF5733",  // optional
-              "image": "data:image/png;base64,..."  // optional base64 data URI or relative URL
+              "image": "http://192.168.x.x:9999/image.png",  // optional (see IMAGE NOTE below)
+              "short_description": "Brief tagline",  // optional — shown under profile name
+              "description": "Detailed notes"  // optional — longer profile description
             }
+
+    IMAGE NOTE: Images are fetched/read and resized by the MCP server, not the client.
+    Large images are automatically compressed to fit the machine's 1MB upload limit.
+    - HTTP(S) URL (recommended): Fetched server-side. If the server runs in Docker,
+      the URL must be reachable from the container — use a LAN IP, not localhost.
+      To serve a local file: `python3 -m http.server 9999` in its directory,
+      then pass `http://<your-LAN-IP>:9999/filename.png`.
+    - file:// URI: Read from the server's local filesystem. Works when the server
+      runs locally or the path is mounted into the container.
+    - data: URI: Passed through as-is (no fetch, no resize). Avoid for large images
+      as the full base64 string travels through the JSON-RPC message.
     """
     _ensure_initialized()
     import json
@@ -178,7 +191,7 @@ def get_profile(profile_id: str) -> Dict[str, Any]:
 @mcp.tool()
 def update_profile(update_data: str) -> Dict[str, Any]:
     """Update an existing profile.
-    
+
     Args:
         update_data: JSON string containing update data with the following structure:
             {
@@ -186,11 +199,25 @@ def update_profile(update_data: str) -> Dict[str, Any]:
               "name": "New Name",  // optional
               "temperature": 92.0,  // optional
               "final_weight": 40.0,  // optional
-              "image": "data:image/png;base64,...",  // optional base64 data URI or relative URL
+              "image": "http://192.168.x.x:9999/image.png",  // optional (see IMAGE NOTE below)
+              "accent_color": "#FF5733",  // optional
+              "short_description": "Brief tagline",  // optional — shown under profile name
+              "description": "Detailed notes",  // optional — longer profile description
               "stages_json": "[...]"  // optional - JSON string of stages array
             }
-            
+
     At minimum, profile_id must be provided. All other fields are optional.
+
+    IMAGE NOTE: Images are fetched/read and resized by the MCP server, not the client.
+    Large images are automatically compressed to fit the machine's 1MB upload limit.
+    - HTTP(S) URL (recommended): Fetched server-side. If the server runs in Docker,
+      the URL must be reachable from the container — use a LAN IP, not localhost.
+      To serve a local file: `python3 -m http.server 9999` in its directory,
+      then pass `http://<your-LAN-IP>:9999/filename.png`.
+    - file:// URI: Read from the server's local filesystem. Works when the server
+      runs locally or the path is mounted into the container.
+    - data: URI: Passed through as-is (no fetch, no resize). Avoid for large images
+      as the full base64 string travels through the JSON-RPC message.
     """
     _ensure_initialized()
     import json

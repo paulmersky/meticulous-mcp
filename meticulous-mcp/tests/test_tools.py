@@ -547,7 +547,7 @@ def test_validate_profile_new_format_with_schema_errors(initialized_tools):
 def test_update_profile_success(initialized_tools):
     """Test successful profile update."""
     mock_api_client, mock_validator = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Old Name",
@@ -558,19 +558,12 @@ def test_update_profile_success(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
-    
-    updated_profile = Profile(
-        id="test-id",
-        name="New Name",
-        author="Test Author",
-        author_id="author-id",
-        temperature=92.0,
-        final_weight=42.0,
-        stages=[],
-    )
-    save_response = ChangeProfileResponse(change_id="change-1", profile=updated_profile)
-    mock_api_client.save_profile.return_value = save_response
-    
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "New Name",
+    }
+
     from meticulous_mcp.tools import ProfileUpdateInput
     input_data = ProfileUpdateInput(
         profile_id="test-id",
@@ -578,7 +571,7 @@ def test_update_profile_success(initialized_tools):
         temperature=92.0,
         final_weight=42.0,
     )
-    
+
     result = update_profile_tool(input_data)
     assert result["profile_id"] == "test-id"
     assert result["profile_name"] == "New Name"
@@ -602,7 +595,7 @@ def test_update_profile_get_error(initialized_tools):
 def test_update_profile_update_stages(initialized_tools):
     """Test profile update with stage updates."""
     mock_api_client, mock_validator = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Test Profile",
@@ -613,19 +606,12 @@ def test_update_profile_update_stages(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
-    
-    updated_profile = Profile(
-        id="test-id",
-        name="Test Profile",
-        author="Test Author",
-        author_id="author-id",
-        temperature=90.0,
-        final_weight=40.0,
-        stages=[],
-    )
-    save_response = ChangeProfileResponse(change_id="change-1", profile=updated_profile)
-    mock_api_client.save_profile.return_value = save_response
-    
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "Test Profile",
+    }
+
     from meticulous_mcp.tools import ProfileUpdateInput
     input_data = ProfileUpdateInput(
         profile_id="test-id",
@@ -639,7 +625,7 @@ def test_update_profile_update_stages(initialized_tools):
             }
         ],
     )
-    
+
     result = update_profile_tool(input_data)
     assert result["profile_id"] == "test-id"
 
@@ -647,7 +633,7 @@ def test_update_profile_update_stages(initialized_tools):
 def test_update_profile_stages_json(initialized_tools):
     """Test profile update with stages_json."""
     mock_api_client, mock_validator = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Test Profile",
@@ -658,19 +644,12 @@ def test_update_profile_stages_json(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
-    
-    updated_profile = Profile(
-        id="test-id",
-        name="Test Profile",
-        author="Test Author",
-        author_id="author-id",
-        temperature=90.0,
-        final_weight=40.0,
-        stages=[],
-    )
-    save_response = ChangeProfileResponse(change_id="change-1", profile=updated_profile)
-    mock_api_client.save_profile.return_value = save_response
-    
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "Test Profile",
+    }
+
     from meticulous_mcp.tools import ProfileUpdateInput
     import json
     stages_json = json.dumps([
@@ -686,7 +665,7 @@ def test_update_profile_stages_json(initialized_tools):
         profile_id="test-id",
         stages_json=stages_json,
     )
-    
+
     result = update_profile_tool(input_data)
     assert result["profile_id"] == "test-id"
 
@@ -694,7 +673,7 @@ def test_update_profile_stages_json(initialized_tools):
 def test_update_profile_stages_json_invalid(initialized_tools):
     """Test profile update with invalid stages_json."""
     mock_api_client, _ = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Test Profile",
@@ -705,6 +684,7 @@ def test_update_profile_stages_json_invalid(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
     
     from meticulous_mcp.tools import ProfileUpdateInput
     input_data = ProfileUpdateInput(
@@ -720,7 +700,7 @@ def test_update_profile_stages_json_invalid(initialized_tools):
 def test_update_profile_variables_json(initialized_tools):
     """Test profile update with variables_json."""
     mock_api_client, mock_validator = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Test Profile",
@@ -731,18 +711,11 @@ def test_update_profile_variables_json(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
-    
-    updated_profile = Profile(
-        id="test-id",
-        name="Test Profile",
-        author="Test Author",
-        author_id="author-id",
-        temperature=90.0,
-        final_weight=40.0,
-        stages=[],
-    )
-    save_response = ChangeProfileResponse(change_id="change-1", profile=updated_profile)
-    mock_api_client.save_profile.return_value = save_response
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "Test Profile",
+    }
     
     from meticulous_mcp.tools import ProfileUpdateInput
     import json
@@ -761,7 +734,7 @@ def test_update_profile_variables_json(initialized_tools):
 def test_update_profile_validation_error(initialized_tools):
     """Test profile update with validation error."""
     mock_api_client, mock_validator = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Test Profile",
@@ -772,6 +745,7 @@ def test_update_profile_validation_error(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
     
     from meticulous_mcp.profile_validator import ProfileValidationError
     mock_validator.validate_and_raise.side_effect = ProfileValidationError(
@@ -789,7 +763,7 @@ def test_update_profile_validation_error(initialized_tools):
 def test_update_profile_save_error(initialized_tools):
     """Test profile update with save error."""
     mock_api_client, mock_validator = initialized_tools
-    
+
     existing_profile = Profile(
         id="test-id",
         name="Test Profile",
@@ -800,9 +774,10 @@ def test_update_profile_save_error(initialized_tools):
         stages=[],
     )
     mock_api_client.get_profile.return_value = existing_profile
-    
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
+
     error = APIError(error="Failed to save")
-    mock_api_client.save_profile.return_value = error
+    mock_api_client.save_profile_raw.return_value = error
     
     from meticulous_mcp.tools import ProfileUpdateInput
     input_data = ProfileUpdateInput(profile_id="test-id", name="New Name")
@@ -933,6 +908,149 @@ def test_ensure_initialized_not_called():
     mock_api = Mock(spec=MeticulousAPIClient)
     mock_validator = Mock(spec=ProfileValidator)
     initialize_tools(mock_api, mock_validator)
+
+
+def test_update_profile_accent_color(initialized_tools):
+    """Test profile update with accent_color."""
+    mock_api_client, mock_validator = initialized_tools
+
+    existing_profile = Profile(
+        id="test-id",
+        name="Test Profile",
+        author="Test Author",
+        author_id="author-id",
+        temperature=90.0,
+        final_weight=40.0,
+        stages=[],
+    )
+    mock_api_client.get_profile.return_value = existing_profile
+    mock_api_client.get_profile_raw.return_value = {"display": {}}
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "Test Profile",
+    }
+
+    from meticulous_mcp.tools import ProfileUpdateInput
+    input_data = ProfileUpdateInput(
+        profile_id="test-id",
+        accent_color="#000000",
+    )
+
+    result = update_profile_tool(input_data)
+    assert result["profile_id"] == "test-id"
+    # Verify save_profile_raw was called with accentColor in display
+    saved_dict = mock_api_client.save_profile_raw.call_args[0][0]
+    assert saved_dict["display"]["accentColor"] == "#000000"
+
+
+def test_create_profile_with_description(initialized_tools):
+    """Test profile creation with short_description and description."""
+    mock_api_client, mock_validator = initialized_tools
+
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "new-id",
+        "name": "Test Profile",
+    }
+
+    stage_input = StageInput(
+        name="Stage 1",
+        key="stage_1",
+        type="flow",
+        dynamics_points=[[0, 4]],
+        dynamics_over="time",
+        exit_triggers=[{"type": "time", "value": 30.0}],
+    )
+    input_data = ProfileCreateInput(
+        name="Test Profile",
+        author="Test Author",
+        stages=[stage_input],
+        short_description="A fruity espresso",
+        description="Detailed description of the profile",
+    )
+
+    result = create_profile_tool(input_data)
+    assert result["profile_id"] == "new-id"
+    # Verify save_profile_raw was used (not save_profile)
+    mock_api_client.save_profile_raw.assert_called_once()
+    saved_dict = mock_api_client.save_profile_raw.call_args[0][0]
+    assert saved_dict["display"]["shortDescription"] == "A fruity espresso"
+    assert saved_dict["display"]["description"] == "Detailed description of the profile"
+
+
+def test_update_profile_with_description(initialized_tools):
+    """Test profile update with short_description and description."""
+    mock_api_client, mock_validator = initialized_tools
+
+    existing_profile = Profile(
+        id="test-id",
+        name="Test Profile",
+        author="Test Author",
+        author_id="author-id",
+        temperature=90.0,
+        final_weight=40.0,
+        stages=[],
+    )
+    mock_api_client.get_profile.return_value = existing_profile
+    mock_api_client.get_profile_raw.return_value = {
+        "display": {"shortDescription": "Old desc"},
+    }
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "Test Profile",
+    }
+
+    from meticulous_mcp.tools import ProfileUpdateInput
+    input_data = ProfileUpdateInput(
+        profile_id="test-id",
+        short_description="New short desc",
+        description="New long desc",
+    )
+
+    result = update_profile_tool(input_data)
+    assert result["profile_id"] == "test-id"
+    saved_dict = mock_api_client.save_profile_raw.call_args[0][0]
+    assert saved_dict["display"]["shortDescription"] == "New short desc"
+    assert saved_dict["display"]["description"] == "New long desc"
+
+
+def test_update_profile_preserves_existing_description(initialized_tools):
+    """Test that updating other fields preserves existing shortDescription/description."""
+    mock_api_client, mock_validator = initialized_tools
+
+    existing_profile = Profile(
+        id="test-id",
+        name="Test Profile",
+        author="Test Author",
+        author_id="author-id",
+        temperature=90.0,
+        final_weight=40.0,
+        stages=[],
+    )
+    mock_api_client.get_profile.return_value = existing_profile
+    mock_api_client.get_profile_raw.return_value = {
+        "display": {
+            "image": "/api/v1/profile/image/abc123.jpeg",
+            "shortDescription": "Preserved",
+            "description": "Also preserved",
+        },
+    }
+    mock_api_client.save_profile_raw.return_value = {
+        "id": "test-id",
+        "name": "New Name",
+    }
+
+    from meticulous_mcp.tools import ProfileUpdateInput
+    input_data = ProfileUpdateInput(
+        profile_id="test-id",
+        name="New Name",
+    )
+
+    result = update_profile_tool(input_data)
+    saved_dict = mock_api_client.save_profile_raw.call_args[0][0]
+    assert saved_dict["display"]["shortDescription"] == "Preserved"
+    assert saved_dict["display"]["description"] == "Also preserved"
+    # Image should use server path, not re-serialized data URI
+    assert saved_dict["display"]["image"] == "/api/v1/profile/image/abc123.jpeg"
 
 
 def test_list_profiles_partial_profile_missing_attrs(initialized_tools):
