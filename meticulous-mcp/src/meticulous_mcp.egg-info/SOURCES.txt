@@ -1,9 +1,9 @@
 LICENSE
-README.md
 pyproject.toml
 src/meticulous_mcp/__init__.py
 src/meticulous_mcp/__main__.py
 src/meticulous_mcp/api_client.py
+src/meticulous_mcp/image_utils.py
 src/meticulous_mcp/profile_builder.py
 src/meticulous_mcp/profile_validator.py
 src/meticulous_mcp/server.py
@@ -15,6 +15,7 @@ src/meticulous_mcp.egg-info/entry_points.txt
 src/meticulous_mcp.egg-info/requires.txt
 src/meticulous_mcp.egg-info/top_level.txt
 tests/test_api_client.py
+tests/test_image_utils.py
 tests/test_profile_builder.py
 tests/test_profile_validator.py
 tests/test_server.py
