@@ -10,6 +10,8 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
 ]
 dependencies = [
+    "mcp>=1.1.2,<2.0.0",
+    "pyMeticulous>=0.2.0",
     "requests>=2.32.3",
     "pydantic>=2.7.3",
     "python-socketio>=5.11.2",
@@ -43,4 +45,3 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-

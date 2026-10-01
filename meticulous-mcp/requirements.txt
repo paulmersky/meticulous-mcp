@@ -1,4 +1,4 @@
-mcp>=1.1.2
+mcp>=1.1.2,<2.0.0
 pyMeticulous>=0.2.0
 requests>=2.32.3
 pydantic>=2.7.3
@@ -15,4 +15,3 @@ pydantic-settings>=2.5.2
 Pillow>=10.0
 pytest>=8.2.2
 pytest-mock>=3.14.0
-
